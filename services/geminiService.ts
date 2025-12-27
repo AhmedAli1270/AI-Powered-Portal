@@ -1,17 +1,10 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { SearchResult, SourceItem } from "../types";
 
-const API_KEY = process.env.API_KEY || '';
-
-// Initialize client
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
 export const analyzeTopic = async (topic: string): Promise<SearchResult> => {
-  if (!API_KEY) {
-    throw new Error("API Key is missing.");
-  }
-
-  const model = "gemini-2.5-flash";
+  // Initialize precisely as required by the SDK documentation
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const systemInstruction = `
     You are the "PakGov Intel" engine, a specialized AI for tracking Pakistan Government initiatives, policies, and news.
@@ -47,35 +40,39 @@ export const analyzeTopic = async (topic: string): Promise<SearchResult> => {
   `;
 
   try {
+    // Upgraded to 'gemini-3-pro-preview' as government intelligence involves complex policy analysis.
+    // Inlined the model name according to current best practices.
     const response = await ai.models.generateContent({
-      model: model,
+      model: 'gemini-3-pro-preview',
       contents: `Find the latest government news and policy updates in Pakistan regarding: "${topic}". Prioritize sources from the last 30 days.`,
       config: {
         systemInstruction: systemInstruction,
         tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 0 } // Disable thinking for faster response on flash
       },
     });
 
+    // Directly access the .text property (not a method).
     const markdownReport = response.text || "No report generated.";
     
-    // Extract sources from grounding chunks
     const sources: SourceItem[] = [];
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
 
     if (chunks) {
       chunks.forEach((chunk: any) => {
-        if (chunk.web) {
-          sources.push({
-            title: chunk.web.title || "Unknown Source",
-            uri: chunk.web.uri || "#",
-            source: new URL(chunk.web.uri).hostname.replace('www.', '')
-          });
+        if (chunk.web && chunk.web.uri) {
+          try {
+            sources.push({
+              title: chunk.web.title || "Unknown Source",
+              uri: chunk.web.uri,
+              source: new URL(chunk.web.uri).hostname.replace('www.', '')
+            });
+          } catch (e) {
+            console.debug("Skipping invalid URI in grounding metadata", chunk.web.uri);
+          }
         }
       });
     }
 
-    // De-duplicate sources based on URI
     const uniqueSources = Array.from(new Map(sources.map(item => [item.uri, item])).values());
 
     return {
@@ -83,7 +80,7 @@ export const analyzeTopic = async (topic: string): Promise<SearchResult> => {
       sources: uniqueSources
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
     throw error;
   }
