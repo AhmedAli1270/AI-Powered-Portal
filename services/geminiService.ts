@@ -4,7 +4,7 @@ import { SearchResult, SourceItem } from "../types";
 
 export const analyzeTopic = async (topic: string): Promise<SearchResult> => {
   // Initialize precisely as required by the SDK documentation
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || 'FAKE_API_KEY_FOR_DEVELOPMENT' });
   
   const systemInstruction = `
     You are the "PakGov Intel" engine, a specialized AI for tracking Pakistan Government initiatives, policies, and news.
@@ -20,19 +20,19 @@ export const analyzeTopic = async (topic: string): Promise<SearchResult> => {
     Format your response in CLEAN MARKDOWN. 
     Use the following structure exactly:
     
-    # 🚨 Executive Brief
+    # ð¨ Executive Brief
     (A 2-3 sentence high-level summary of the current status)
 
-    # 🏛️ Key Government Initiatives
+    # ðï¸ Key Government Initiatives
     (Bulleted list of specific programs, funds, or projects launched)
 
-    # 📜 Policy & Regulation
+    # ð Policy & Regulation
     (Updates on laws, taxes, SROs, or compliance requirements)
 
-    # 🗣️ Official Narrative
+    # ð£ï¸ Official Narrative
     (What key officials/Ministers are saying)
 
-    # 🔮 Strategic Impact
+    # ð® Strategic Impact
     (Brief analysis of the long-term effect on Pakistan)
     
     If no specific government news is found, provide a general status update on the sector in Pakistan.
