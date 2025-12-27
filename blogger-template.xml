@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html>
+<html b:css='false' b:defaultwidgetversion='2' b:layoutsversion='3' b:responsive='true' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/namespaces/blogger/template' xmlns:data='http://www.google.com/namespaces/data' xmlns:expr='http://www.google.com/namespaces/expr'>
+  <head>
+    <meta charset='UTF-8'/>
+    <meta content='width=device-width, initial-scale=1.0' name='viewport'/>
+    <title>PakGov Intel | News Intelligence Portal</title>
+    
+    <!-- External Assets -->
+    <script src='https://cdn.tailwindcss.com'></script>
+    <link href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap' rel='stylesheet'/>
+    
+    <!-- React & Libraries (UMD for Blogger Stability) -->
+    <script src='https://unpkg.com/react@18/umd/react.production.min.js'></script>
+    <script src='https://unpkg.com/react-dom@18/umd/react-dom.production.min.js'></script>
+    
+    <!-- Babel for Browser-side JSX Transpilation -->
+    <script src='https://unpkg.com/@babel/standalone/babel.min.js'></script>
+
+    <b:skin><![CDATA[
+      /* Reset Blogger Default UI */
+      #navbar-iframe, .navbar, .header-outer, .footer-outer, .sidebar-wrapper, .post-footer, .comments { display: none !important; }
+      body { background-color: #f8fafc; margin: 0; padding: 0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+      #root { min-height: 100vh; }
+      
+      /* Standard Scrollbar */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #f1f1f1; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    ]]></b:skin>
+
+    <script type='text/javascript'>
+      //<![CDATA[
+      // Initialize Tailwind
+      window.tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: { sans: ['Inter', 'sans-serif'] },
+            colors: {
+              pak: {
+                50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0', 300: '#86efac',
+                400: '#4ade80', 500: '#22c55e', 600: '#16a34a', 700: '#15803d',
+                800: '#166534', 900: '#14532d', 950: '#052e16',
+              }
+            }
+          }
+        }
+      };
+
+      // Environmental Shim for process.env
+      if (typeof process === 'undefined') {
+        window.process = { env: { API_KEY: '' } };
+      }
+      //]]>
+    </script>
+  </head>
+  <body>
+    <!-- Main Mount Point -->
+    <div id='root'></div>
+
+    <!-- Required Blogger Layout Section (Invisible) -->
+    <div style='display:none;'>
+      <b:section id='main' showaddelement='no'>
+        <b:widget id='Blog1' locked='true' title='Blog Posts' type='Blog' visible='false'/>
+      </b:section>
+    </div>
+
+    <!-- Application Script -->
+    <script data-type='module' type='text/babel'>
+      //<![CDATA[
+      const { useState, useEffect, useMemo } = React;
+      
+      // Import external modules via ESM URLs inside Babel Module
+      import { 
+        Search, TrendingUp, Building2, Briefcase, Zap, Sprout, 
+        ShieldCheck, ChevronRight, Menu, X, Database, Globe, ExternalLink,
+        Loader2, FileText
+      } from 'https://esm.sh/lucide-react';
+      
+      import { GoogleGenAI } from 'https://esm.sh/@google/genai';
+
+      // --- Types & Constants ---
+      const LoadingState = {
+        IDLE: 'IDLE',
+        CRAWLING: 'CRAWLING',
+        COMPLETE: 'COMPLETE',
+        ERROR: 'ERROR'
+      };
+
+      const PRESETS = [
+        { id: 'economy', label: 'Economy & IMF', icon: TrendingUp, query: 'Economy IMF State Bank Pakistan updates' },
+        { id: 'it', label: 'IT & Digital', icon: Briefcase, query: 'IT Exports Digital Pakistan Policy Ministry' },
+        { id: 'energy', label: 'Energy Crisis', icon: Zap, query: 'Energy Power Sector Circular Debt Pakistan news' },
+        { id: 'agri', label: 'Agriculture', icon: Sprout, query: 'Agriculture Wheat Sugar Crops Pakistan Gov' },
+        { id: 'security', label: 'National Security', icon: ShieldCheck, query: 'National Security Defense Pakistan policy' },
+        { id: 'infra', label: 'Infrastructure', icon: Building2, query: 'Infrastructure Development PSDP CPEC news' },
+      ];
+
+      // --- Service: Gemini SDK ---
+      const analyzeTopic = async (topic) => {
+        // Uses the globally available process.env.API_KEY
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        const systemInstruction = `
+          You are the "PakGov Intel" AI. Analyze government news for: ${topic}.
+          Format in CLEAN MARKDOWN with headings: # 🚨 Executive Brief, # 🏛️ Key Government Initiatives, # 📜 Policy & Regulation, # 🗣️ Official Narrative, # 🔮 Strategic Impact.
+        `;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-pro-preview',
+          contents: `Provide intelligence on Pakistan government actions regarding: "${topic}".`,
+          config: {
+            systemInstruction,
+            tools: [{ googleSearch: {} }],
+          },
+        });
+
+        const sources = [];
+        const metadata = response.candidates?.[0]?.groundingMetadata;
+        if (metadata?.groundingChunks) {
+          metadata.groundingChunks.forEach((chunk) => {
+            if (chunk.web) {
+              sources.push({
+                title: chunk.web.title || "Source",
+                uri: chunk.web.uri,
+                source: new URL(chunk.web.uri).hostname.replace('www.', '')
+              });
+            }
+          });
+        }
+
+        return {
+          markdownReport: response.text,
+          sources: Array.from(new Map(sources.map(s => [s.uri, s])).values())
+        };
+      };
+
+      // --- Sub-components ---
+      const MarkdownRenderer = ({ content }) => {
+        if (!content) return null;
+        return (
+          <div className="prose prose-slate max-w-none">
+            {content.split('\n').map((line, i) => {
+              const l = line.trim();
+              if (l.startsWith('# ')) return <h1 key={i} className="text-2xl font-bold text-pak-900 mt-6 mb-4 border-b pb-2">{l.replace('# ', '')}</h1>;
+              if (l.startsWith('* ') || l.startsWith('- ')) return <li key={i} className="ml-4 mb-1 text-slate-700">{l.replace(/^[*-]\s+/, '')}</li>;
+              if (l.length > 0) return <p key={i} className="mb-4 text-slate-700 leading-relaxed">{l}</p>;
+              return <div key={i} className="h-2" />;
+            })}
+          </div>
+        );
+      };
+
+      const SourceCard = ({ source }) => (
+        <a href={source.uri} target="_blank" rel="noopener" className="block p-3 bg-slate-50 border rounded-xl hover:border-pak-500 transition-all group">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{source.source}</span>
+            <ExternalLink size={12} className="text-slate-300 group-hover:text-pak-600" />
+          </div>
+          <h4 className="text-sm font-medium text-slate-800 line-clamp-2">{source.title}</h4>
+        </a>
+      );
+
+      // --- Main App ---
+      function App() {
+        const [query, setQuery] = useState('');
+        const [loading, setLoading] = useState(LoadingState.IDLE);
+        const [result, setResult] = useState(null);
+        const [error, setError] = useState(null);
+
+        const runAnalysis = async (q) => {
+          if (!q.trim()) return;
+          setLoading(LoadingState.CRAWLING);
+          setError(null);
+          try {
+            const data = await analyzeTopic(q);
+            setResult(data);
+            setLoading(LoadingState.COMPLETE);
+          } catch (err) {
+            setError(err.message || "Intelligence retrieval failed.");
+            setLoading(LoadingState.ERROR);
+          }
+        };
+
+        return (
+          <div className="min-h-screen flex flex-col">
+            <nav className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+              <div className="flex items-center space-x-2" onClick={() => window.location.reload()}>
+                <div className="bg-pak-600 p-1.5 rounded-lg text-white"><Building2 size={20} /></div>
+                <span className="text-lg font-bold">PakGov<span className="text-pak-600">Intel</span></span>
+              </div>
+              <div className="hidden md:flex items-center space-x-6">
+                {PRESETS.slice(0, 3).map(p => (
+                  <button key={p.id} onClick={() => {setQuery(p.label); runAnalysis(p.query);}} className="text-xs font-semibold text-slate-500 hover:text-pak-600">{p.label}</button>
+                ))}
+              </div>
+            </nav>
+
+            <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-12">
+              <div className={`transition-all duration-700 ${!result && loading === LoadingState.IDLE ? 'mt-20 text-center' : 'mb-12'}`}>
+                {!result && loading === LoadingState.IDLE && (
+                  <div className="mb-10">
+                    <h1 className="text-5xl font-black text-slate-900 mb-4">Portal for Public <span className="text-pak-600">Intelligence</span></h1>
+                    <p className="text-slate-500 text-lg">Real-time monitoring of Pakistan government policies and initiatives.</p>
+                  </div>
+                )}
+                
+                <div className="max-w-2xl mx-auto relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-pak-600 transition-colors">
+                    <Search size={20} />
+                  </div>
+                  <input 
+                    className="w-full pl-12 pr-32 py-4 bg-white border-2 border-slate-200 rounded-2xl outline-none focus:border-pak-500 transition-all text-lg shadow-sm"
+                    placeholder="Search policy, project or ministry..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && runAnalysis(query)}
+                  />
+                  <button 
+                    onClick={() => runAnalysis(query)}
+                    className="absolute right-2 top-2 bottom-2 bg-pak-600 text-white px-6 rounded-xl font-bold hover:bg-pak-700 disabled:opacity-50 transition-colors"
+                    disabled={loading === LoadingState.CRAWLING}
+                  >
+                    {loading === LoadingState.CRAWLING ? <Loader2 className="animate-spin" size={18} /> : 'Scan'}
+                  </button>
+                </div>
+
+                {!result && loading === LoadingState.IDLE && (
+                  <div className="mt-12 grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {PRESETS.map(p => (
+                      <button key={p.id} onClick={() => {setQuery(p.label); runAnalysis(p.query);}} className="flex flex-col items-center p-6 bg-white border rounded-2xl hover:border-pak-400 hover:shadow-md transition-all group">
+                        <div className="mb-3 text-slate-400 group-hover:text-pak-600 transition-colors"><p.icon size={24} /></div>
+                        <span className="font-bold text-slate-700">{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {loading === LoadingState.CRAWLING && (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-16 h-16 border-4 border-slate-100 border-t-pak-600 rounded-full animate-spin mb-6" />
+                  <h3 className="text-xl font-bold text-slate-800">Crawl in Progress</h3>
+                  <p className="text-slate-500">Retrieving official gazettes and news releases...</p>
+                </div>
+              )}
+
+              {result && loading === LoadingState.COMPLETE && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="lg:col-span-8 bg-white border rounded-3xl p-8 md:p-12 shadow-sm">
+                    <MarkdownRenderer content={result.markdownReport} />
+                  </div>
+                  <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-pak-900 rounded-3xl p-6 text-white overflow-hidden relative">
+                      <ShieldCheck size={100} className="absolute -right-6 -bottom-6 opacity-10" />
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-pak-400 mb-2">Subject Matter</h4>
+                      <p className="text-2xl font-black leading-tight">{query}</p>
+                    </div>
+                    <div className="bg-white border rounded-3xl p-6 shadow-sm">
+                      <h4 className="flex items-center text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">
+                        <Database size={14} className="mr-2" /> Grounded Sources
+                      </h4>
+                      <div className="space-y-3">
+                        {result.sources.map((s, i) => <SourceCard key={i} source={s} />)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="max-w-2xl mx-auto mt-10 p-6 bg-red-50 border border-red-200 rounded-2xl flex items-center space-x-4 text-red-700">
+                  <X className="flex-shrink-0" />
+                  <p className="font-medium">{error}</p>
+                </div>
+              )}
+            </main>
+
+            <footer className="py-8 text-center text-[10px] text-slate-400 font-medium uppercase tracking-widest">
+              &copy; {new Date().getFullYear()} PakGov Intel &bull; AI Verification Platform
+            </footer>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+      //]]>
+    </script>
+  </body>
+</html>
